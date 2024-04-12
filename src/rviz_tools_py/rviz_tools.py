@@ -222,7 +222,15 @@ class RvizMarkers(object):
         self.text_marker.action = Marker().ADD
         self.text_marker.type = Marker().TEXT_VIEW_FACING
         self.text_marker.lifetime = self.marker_lifetime
-
+        
+        # WireframeCuboid Marker
+        self.wireframe_cuboid_marker = Marker()
+        self.wireframe_cuboid_marker.header.frame_id = self.base_frame
+        self.wireframe_cuboid_marker.ns = "WireframeCuboid"  # unique ID
+        self.wireframe_cuboid_marker.action = Marker().ADD
+        self.wireframe_cuboid_marker.type = Marker().LINE_LIST
+        self.wireframe_cuboid_marker.scale.x = 0.01  # Line width
+        self.wireframe_cuboid_marker.lifetime = self.marker_lifetime
 
     def loadMarkerPublisher(self, wait_time=None):
         """
@@ -1280,7 +1288,6 @@ class RvizMarkers(object):
 
         return self.publishMarker(spheres_marker)
 
-
     def publishText(self, pose, text, color, scale, lifetime=None):
         """
         Publish a text Marker
@@ -1339,10 +1346,95 @@ class RvizMarkers(object):
         text_marker.text = text
 
         return self.publishMarker(text_marker)
+        
+    def publishWireframeCuboid(self, pose, min_point, max_point, color=[random.random(), random.random(), random.random(), 1.0] ,thickness=0.01 ,lifetime=None):
+        """
+        Publish a wireframe Marker from min. max points.
 
+        @param pose (numpy matrix, numpy ndarray, ROS Pose)
+        @param min_point (ROS Point)
+        @param max_point (ROS Point)
+        @param color name (string) or RGB color value (tuple or list)
+        @param thickness (float) thickness of the lines
+        @param lifetime (float, None = never expire)
+        """
+
+        if self.muted == True:
+            return True
+        
+        # Convert input pose to a ROS Pose Msg
+        if (type(pose) == numpy.matrix) or (type(pose) == numpy.ndarray):
+            wireframe_cuboid_pose = mat_to_pose(pose)
+        elif type(pose) == Pose:
+            wireframe_cuboid_pose = pose
+        else:
+            rospy.logerr(
+                "Pose is unsupported type '%s' in publishWireframeCuboid()",
+                type(pose).__name__,
+            )
+            return False
+                # Increment the ID number
+        self.wireframe_cuboid_marker.id += 1
+
+        # Get the default parameters
+        wireframe_cuboid_marker = self.wireframe_cuboid_marker
+
+        if lifetime == None:
+            wireframe_cuboid_marker.lifetime = rospy.Duration(
+                0.0
+            )  # 0 = Marker never expires
+        else:
+            wireframe_cuboid_marker.lifetime = rospy.Duration(lifetime)  # in seconds
+
+        # Set the timestamp
+        wireframe_cuboid_marker.header.stamp = rospy.Time.now()
+
+        # Define vertices of the cuboid 8 x 4
+        vertices = numpy.array([
+            [min_point.x, min_point.y, min_point.z, 1],
+            [max_point.x, min_point.y, min_point.z, 1],
+            [min_point.x, max_point.y, min_point.z, 1],
+            [min_point.x, min_point.y, max_point.z, 1],
+            [max_point.x, max_point.y, max_point.z, 1],
+            [min_point.x, max_point.y, max_point.z, 1],
+            [max_point.x, min_point.y, max_point.z, 1],
+            [max_point.x, max_point.y, min_point.z, 1]
+        ])
+
+        wireframe_cuboid_marker.points[:] = []
+        wireframe_cuboid_marker.colors = []
+        color_ = self.getColor(color=color)
+        # Add line segments
+        box_connections = [
+            [0, 1],
+            [0, 2],
+            [0, 3],
+            [1, 6],
+            [1, 7],
+            [2, 5],
+            [2, 7],
+            [3, 5],
+            [3, 6],
+            [4, 5],
+            [4, 6],
+            [4, 7]
+        ]
+        for cc in box_connections:
+            p1 = vertices[cc[0]]
+            p2 = vertices[cc[1]]
+
+            wireframe_cuboid_marker.points.append(Point(p1[0], p1[1], p1[2]))
+            wireframe_cuboid_marker.colors.append(color_)
+            # End of segment
+            wireframe_cuboid_marker.points.append(Point(p2[0], p2[1], p2[2]))
+            wireframe_cuboid_marker.colors.append(color_)
+
+        self.wireframe_cuboid_marker.scale.x = thickness
+        wireframe_cuboid_marker.pose = wireframe_cuboid_pose
+
+        return self.publishMarker(wireframe_cuboid_marker)
  
 #------------------------------------------------------------------------------#
-
 
 def pose_to_mat(pose):
     """
